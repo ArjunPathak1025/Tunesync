@@ -30,6 +30,7 @@ dependencies {
     implementation(project(":core:model"))
     implementation(project(":core:extension-api"))
     implementation(project(":core:extension-manager"))
+    implementation(project(":extensions:youtube-music"))
 
     implementation(platform("androidx.compose:compose-bom:2025.01.00"))
     implementation("androidx.activity:activity-compose:1.10.0")
