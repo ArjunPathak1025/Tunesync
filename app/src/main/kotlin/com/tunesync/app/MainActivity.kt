@@ -35,8 +35,10 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -50,7 +52,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.tunesync.app.playback.PlaybackController
+import com.tunesync.core.extensions.ExtensionManager
 import com.tunesync.core.model.Song
+import com.tunesync.extension.youtube.YouTubeMusicExtension
+import kotlinx.coroutines.delay
 
 private val sampleSongs = listOf(
     Song("1", "Midnight Drive", "TuneSync Radio", "Afterglow"),
@@ -69,7 +74,9 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 private fun TuneSyncApp() {
-    val playbackController = remember { PlaybackController(androidx.compose.ui.platform.LocalContext.current) }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val playbackController = remember { PlaybackController(context) }
+    val extensions = remember { ExtensionManager(listOf(YouTubeMusicExtension())) }
     var selectedTab by remember { mutableIntStateOf(0) }
     var selectedSong by remember { mutableStateOf<Song?>(null) }
     var isPlaying by remember { mutableStateOf(false) }
@@ -117,7 +124,7 @@ private fun TuneSyncApp() {
                     isPlaying = true
                     playbackController.play(song)
                 }
-                1 -> SearchScreen(Modifier.padding(padding)) { song ->
+                1 -> SearchScreen(Modifier.padding(padding), extensions) { song ->
                     selectedSong = song
                     isPlaying = true
                     playbackController.play(song)
@@ -149,18 +156,59 @@ private fun HomeScreen(modifier: Modifier, onSongClick: (Song) -> Unit) {
 }
 
 @Composable
-private fun SearchScreen(modifier: Modifier, onSongClick: (Song) -> Unit) {
+private fun SearchScreen(
+    modifier: Modifier,
+    extensions: ExtensionManager,
+    onSongClick: (Song) -> Unit
+) {
+    var query by remember { mutableStateOf("") }
+    var results by remember { mutableStateOf<List<Song>>(emptyList()) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var loading by remember { mutableStateOf(false) }
+
+    LaunchedEffect(query) {
+        if (query.trim().length < 2) {
+            results = emptyList()
+            error = null
+            return@LaunchedEffect
+        }
+        delay(450)
+        loading = true
+        error = null
+        runCatching {
+            extensions.get("youtube-music")?.search(query.trim())?.songs.orEmpty()
+        }.onSuccess { results = it }
+            .onFailure { error = it.message ?: "Search failed" }
+        loading = false
+    }
+
     LazyColumn(modifier.fillMaxSize().padding(20.dp)) {
         item {
             Text("Search", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(14.dp))
-            Surface(shape = RoundedCornerShape(18.dp), color = Color(0xFF1B1B1F)) {
-                Text("Search songs, artists, albums...", color = Color.Gray, modifier = Modifier.fillMaxWidth().padding(18.dp))
+            TextField(
+                value = query,
+                onValueChange = { query = it },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                placeholder = { Text("Songs, artists, albums...") },
+                leadingIcon = { Icon(Icons.Default.Search, null) },
+                shape = RoundedCornerShape(18.dp)
+            )
+            Spacer(Modifier.height(20.dp))
+            when {
+                loading -> Text("Searching YouTube Music…", color = Color.Gray)
+                error != null -> Text(error!!, color = MaterialTheme.colorScheme.error)
+                query.length < 2 -> Text("Type at least 2 characters to search", color = Color.Gray)
+                results.isEmpty() -> Text("No results", color = Color.Gray)
             }
-            Spacer(Modifier.height(24.dp))
-            SectionTitle("Try these")
+            if (results.isNotEmpty()) {
+                Spacer(Modifier.height(10.dp))
+                SectionTitle("YouTube Music")
+            }
         }
-        items(sampleSongs) { song -> SongRow(song, onClick = { onSongClick(song) }) }
+        items(results) { song -> SongRow(song, onClick = { onSongClick(song) }) }
+        item { Spacer(Modifier.height(120.dp)) }
     }
 }
 
