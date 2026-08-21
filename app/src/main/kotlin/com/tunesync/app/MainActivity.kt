@@ -23,6 +23,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LibraryMusic
+import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
@@ -35,6 +36,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -47,6 +49,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.tunesync.app.playback.PlaybackController
 import com.tunesync.core.model.Song
 
 private val sampleSongs = listOf(
@@ -66,15 +69,26 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 private fun TuneSyncApp() {
+    val playbackController = remember { PlaybackController(androidx.compose.ui.platform.LocalContext.current) }
     var selectedTab by remember { mutableIntStateOf(0) }
     var selectedSong by remember { mutableStateOf<Song?>(null) }
+    var isPlaying by remember { mutableStateOf(false) }
+
+    DisposableEffect(Unit) {
+        onDispose { playbackController.release() }
+    }
 
     MaterialTheme {
         Scaffold(
             containerColor = Color(0xFF09090B),
             bottomBar = {
                 Column {
-                    selectedSong?.let { song -> MiniPlayer(song, onOpen = { }) }
+                    selectedSong?.let { song ->
+                        MiniPlayer(song, isPlaying, onToggle = {
+                            playbackController.togglePlayPause()
+                            isPlaying = !isPlaying
+                        })
+                    }
                     NavigationBar(
                         containerColor = Color(0xFF111113),
                         modifier = Modifier.navigationBarsPadding()
@@ -98,8 +112,16 @@ private fun TuneSyncApp() {
             }
         ) { padding ->
             when (selectedTab) {
-                0 -> HomeScreen(Modifier.padding(padding), onSongClick = { selectedSong = it })
-                1 -> SearchScreen(Modifier.padding(padding), onSongClick = { selectedSong = it })
+                0 -> HomeScreen(Modifier.padding(padding)) { song ->
+                    selectedSong = song
+                    isPlaying = true
+                    playbackController.play(song)
+                }
+                1 -> SearchScreen(Modifier.padding(padding)) { song ->
+                    selectedSong = song
+                    isPlaying = true
+                    playbackController.play(song)
+                }
                 2 -> LibraryScreen(Modifier.padding(padding))
                 else -> SettingsScreen(Modifier.padding(padding))
             }
@@ -148,11 +170,9 @@ private fun LibraryScreen(modifier: Modifier) {
         Text("Library", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(20.dp))
         listOf("Liked Songs", "Playlists", "Albums", "Artists", "History").forEach {
-            Surface(
-                modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp),
-                color = Color(0xFF17171A),
-                shape = RoundedCornerShape(16.dp)
-            ) { Text(it, modifier = Modifier.padding(18.dp)) }
+            Surface(modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp), color = Color(0xFF17171A), shape = RoundedCornerShape(16.dp)) {
+                Text(it, modifier = Modifier.padding(18.dp))
+            }
         }
     }
 }
@@ -177,9 +197,7 @@ private fun SongRow(song: Song, onClick: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
-            Modifier.size(58.dp).clip(RoundedCornerShape(14.dp)).background(
-                Brush.linearGradient(listOf(Color(0xFF6B4EFF), Color(0xFFB44CFF)))
-            ),
+            Modifier.size(58.dp).clip(RoundedCornerShape(14.dp)).background(Brush.linearGradient(listOf(Color(0xFF6B4EFF), Color(0xFFB44CFF)))),
             contentAlignment = Alignment.Center
         ) { Text("♪", style = MaterialTheme.typography.headlineSmall) }
         Column(Modifier.weight(1f).padding(horizontal = 14.dp)) {
@@ -191,9 +209,9 @@ private fun SongRow(song: Song, onClick: () -> Unit) {
 }
 
 @Composable
-private fun MiniPlayer(song: Song, onOpen: () -> Unit) {
+private fun MiniPlayer(song: Song, isPlaying: Boolean, onToggle: () -> Unit) {
     Row(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onOpen).background(Color(0xFF1B1B1F)).padding(10.dp),
+        modifier = Modifier.fillMaxWidth().background(Color(0xFF1B1B1F)).padding(10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(Modifier.size(46.dp).clip(RoundedCornerShape(10.dp)).background(Color(0xFF6B4EFF)), contentAlignment = Alignment.Center) { Text("♪") }
@@ -201,7 +219,9 @@ private fun MiniPlayer(song: Song, onOpen: () -> Unit) {
             Text(song.title, fontWeight = FontWeight.SemiBold)
             Text(song.artist, color = Color.Gray, style = MaterialTheme.typography.bodySmall)
         }
-        IconButton(onClick = { }) { Icon(Icons.Default.PlayArrow, "Play") }
+        IconButton(onClick = onToggle) {
+            Icon(if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, if (isPlaying) "Pause" else "Play")
+        }
     }
 }
 
